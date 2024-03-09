@@ -44,6 +44,8 @@ No tests required for this project.
    
 6.  Submit your solution as a GitHub link or a zipped file containing the diagram image, CloudFormation yml and json files, automation scripts and README file.
 
+7.  LoadBalancer URL: http://my-ser-webap-nw4wykxhldpx-2001017318.us-east-1.elb.amazonaws.com/
+
 ## License
 
 [License](LICENSE.txt)

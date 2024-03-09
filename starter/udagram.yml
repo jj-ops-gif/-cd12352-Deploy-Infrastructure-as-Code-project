@@ -129,10 +129,10 @@ Resources:
             <!DOCTYPE html>
             <html>
               <header>
-                <title>It works! Udagram, Udacity</title>
+                <title>it works! Udagram, Udacity</title>
               </header>
               <body>
-                <h1>It works! Udagram, Udacity</h1>
+                <h1>it works! Udagram, Udacity</h1>
                 <p>This website is hosted on Nginx.</p>
               </body>
             </html>

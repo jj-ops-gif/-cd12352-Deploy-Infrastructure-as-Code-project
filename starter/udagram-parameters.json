@@ -5,7 +5,7 @@
     },
     {
         "ParameterKey": "InstanceType",
-        "ParameterValue": "t2.micro"
+        "ParameterValue": "t3.small"
     },
     {
         "ParameterKey": "InstanceAMI",
@@ -29,6 +29,6 @@
     },
 	{
         "ParameterKey": "BucketName",
-        "ParameterValue": "my-bucket-088364153238"
+        "ParameterValue": "my-bucket-196895008979"
     }
 ]

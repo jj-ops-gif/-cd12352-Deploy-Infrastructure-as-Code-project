@@ -300,6 +300,8 @@ Outputs:
     Export:
       Name: !Sub ${EnvironmentName}-S3
 
+  # You can use !GetAtt tag to retrieve the Load Balancer DNS name 
+  # and then use !Join tag to add "HTTP://" value in front of Load Balancer DNS name.
   WebAppLB:
     Description: A reference to the created LB
     Value: !Sub http://${WebAppLB.DNSName}

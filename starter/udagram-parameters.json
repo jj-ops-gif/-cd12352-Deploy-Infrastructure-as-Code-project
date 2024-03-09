@@ -1,6 +1,34 @@
 [
+    {
+        "ParameterKey": "EnvironmentName",
+        "ParameterValue": "Project2-Dev"
+    },
+    {
+        "ParameterKey": "InstanceType",
+        "ParameterValue": "t2.micro"
+    },
+    {
+        "ParameterKey": "InstanceAMI",
+        "ParameterValue": "ami-07d9b9ddc6cd8dd30"
+    },
+    {
+        "ParameterKey": "InstanceKeyPair",
+        "ParameterValue": "WebServerKeyPair"
+    },
+    {
+        "ParameterKey": "BastionInstanceType",
+        "ParameterValue": "t2.micro"
+    },
+    {
+        "ParameterKey": "BastionInstanceAMI",
+        "ParameterValue": "ami-07d9b9ddc6cd8dd30"
+    },
 	{
-		"ParameterKey": "Add you parameters here",
-		"ParameterValue": "Add you parameters here"
-	}
+        "ParameterKey": "BastionKeyPair",
+        "ParameterValue": "MyKeyPair1"
+    },
+	{
+        "ParameterKey": "BucketName",
+        "ParameterValue": "my-bucket-088364153238"
+    }
 ]

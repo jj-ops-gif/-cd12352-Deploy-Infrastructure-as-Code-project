@@ -1,14 +1,120 @@
 Description: CD12352 - Infrastructure as Code Project - Udagram
 
 Parameters:
-  # Add your parameters here
+  EnvironmentName:
+    Description: An environment name that will be prefixed to resource names
+    Type: String
+
+  InstanceType:
+    Description: The EC2 instance type
+    Type: String
+  
+  InstanceAMI:
+    Description: The EC2 AMI of the web server instance
+    Type: String
+
+  InstanceKeyPair:
+    Description: The key pair of the web server instance 
+    Type: AWS::EC2::KeyPair::KeyName
+
+  BastionInstanceType:
+    Description: The EC2 instance type of the bastion
+    Type: String
+  
+  BastionInstanceAMI:
+    Description: The EC2 AMI of the bastion instance 
+    Type: String
+
+  BastionKeyPair:
+    Description: The key pair of the bastion instance 
+    Type: AWS::EC2::KeyPair::KeyName
+
+  BucketName:
+    Description: An name of the S3 bucket
+    Type: String
 
 Resources:
-  # Add your resources here
+
+  S3Bucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Ref BucketName
+      # AccessControl: PublicRead
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Status: "Enabled"
+            NoncurrentVersionExpirationInDays: 10
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: false
+        IgnorePublicAcls: false
+        BlockPublicPolicy: false
+        RestrictPublicBuckets: false
+
+  MyBucketPolicy:
+    Type: 'AWS::S3::BucketPolicy'
+    Properties:
+      Bucket:
+        Ref: 'S3Bucket'
+      PolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal: '*'
+            Action: 's3:GetObject'
+            Resource:
+              Fn::Join:
+                - ''
+                - - 'arn:aws:s3:::'
+                  - Ref: 'S3Bucket'
+                  - '/*'
+
+  LBSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http access to our load balancer
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        CidrIp: 0.0.0.0/0
+
+  WebServerSecGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow http access to our hosts from the LB Security Group
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      - IpProtocol: tcp
+        FromPort: 80
+        ToPort: 80
+        SourceSecurityGroupId: !Ref LBSecGroup
+      # Add the following item to allow SSH access from the bastion host
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        SourceSecurityGroupId: !Ref BastionSecurityGroup
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
   # We include a portion of the LaunchTemplate resource so you can use the UserData.
   WebAppLaunchTemplate:
     Type: AWS::EC2::LaunchTemplate
-    Properties: 
+    Properties:
+      LaunchTemplateName: !Sub "${EnvironmentName}-web-servers"
       LaunchTemplateData:
         UserData:
           Fn::Base64: |
@@ -16,3 +122,199 @@ Resources:
             apt-get update -y
             sudo apt-get install nginx -y
             service nginx start
+
+            WEB_DIR="/var/www/html"
+            
+            cat <<EOF > index.html
+            <!DOCTYPE html>
+            <html>
+              <header>
+                <title>It works! Udagram, Udacity</title>
+              </header>
+              <body>
+                <h1>It works! Udagram, Udacity</h1>
+                <p>This website is hosted on Nginx.</p>
+              </body>
+            </html>
+            EOF
+
+            sudo rm -r $WEB_DIR/index.*
+            sudo cp index.html $WEB_DIR
+
+            sudo systemctl reload nginx
+
+        ImageId: !Ref InstanceAMI
+        SecurityGroupIds:
+          - !Ref WebServerSecGroup
+        InstanceType: !Ref InstanceType
+        KeyName: !Ref InstanceKeyPair
+        BlockDeviceMappings:
+        - DeviceName: "/dev/sdk"
+          Ebs:
+            VolumeSize: '10'
+        IamInstanceProfile:
+          Name: !Ref WebAppInstanceProfile
+        
+
+  WebAppInstanceRole:
+    Type: AWS::IAM::Role
+    Properties:
+      RoleName: !Sub "${EnvironmentName}-web-servers"
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+        - Effect: 'Allow'
+          Principal:
+            Service:
+            - 'ec2.amazonaws.com'
+          Action:
+          - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: s3
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+            - Effect: Allow
+              Action:
+              - 's3:PutObject'
+              - 's3:GetObject'
+              Resource:
+                - !Sub "arn:aws:s3:::${BucketName}/*"
+      ManagedPolicyArns:
+        - arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore
+
+  WebAppInstanceProfile:
+    Type: AWS::IAM::InstanceProfile
+    Properties:
+      Path: '/'
+      Roles:
+      - !Ref WebAppInstanceRole
+
+  WebAppGroup:
+    Type: AWS::AutoScaling::AutoScalingGroup
+    Properties:
+      VPCZoneIdentifier:
+      - Fn::ImportValue: 
+          !Sub "${EnvironmentName}-PRIV-NETS"
+      LaunchTemplate:
+        LaunchTemplateId: !Ref WebAppLaunchTemplate
+        Version: !GetAtt WebAppLaunchTemplate.LatestVersionNumber
+      MinSize: 1
+      DesiredCapacity: 1
+      MaxSize: 1
+      TargetGroupARNs:
+      - Ref: WebAppTargetGroup
+
+  WebAppLB:
+    Type: AWS::ElasticLoadBalancingV2::LoadBalancer
+    Properties:
+      Subnets:
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUB1-SN"
+      - Fn::ImportValue: !Sub "${EnvironmentName}-PUB2-SN"
+      SecurityGroups:
+      - Ref: LBSecGroup
+
+  Listener:
+    Type: AWS::ElasticLoadBalancingV2::Listener
+    Properties:
+      DefaultActions:
+      - Type: forward
+        TargetGroupArn:
+          Ref: WebAppTargetGroup
+      LoadBalancerArn:
+        Ref: WebAppLB
+      Port: '80'
+      Protocol: HTTP
+
+  ALBListenerRule:
+      Type: AWS::ElasticLoadBalancingV2::ListenerRule
+      Properties:
+        Actions:
+        - Type: forward
+          TargetGroupArn: !Ref 'WebAppTargetGroup'
+        Conditions:
+        - Field: path-pattern
+          Values: [/]
+        ListenerArn: !Ref 'Listener'
+        Priority: 1
+
+  WebAppTargetGroup:
+    Type: AWS::ElasticLoadBalancingV2::TargetGroup
+    Properties:
+      HealthCheckIntervalSeconds: 10
+      HealthCheckPath: /
+      HealthCheckProtocol: HTTP
+      HealthCheckTimeoutSeconds: 8
+      HealthyThresholdCount: 2
+      Port: 80
+      Protocol: HTTP
+      UnhealthyThresholdCount: 5
+      VpcId: 
+        Fn::ImportValue:
+          Fn::Sub: "${EnvironmentName}-VPCID"
+
+  # EC 2 server as a bastion host
+  Bastion:
+    Type: AWS::EC2::Instance
+    Properties:
+      InstanceType: !Ref BastionInstanceType
+      KeyName: !Ref BastionKeyPair
+      # Paste the latest UBUNTU AMI
+      ImageId: !Ref BastionInstanceAMI
+      # NetworkInterfaces:
+      #   - AssociatePublicIpAddress: true
+      #     DeviceIndex: '0'
+      #     GroupSet:
+      #       - !Ref BastionSecurityGroup
+      #     SubnetId: !Sub "${EnvironmentName}-PUB2-SN"
+      Tags:
+        - Key: Name
+          Value: "Bastion Host"
+      SecurityGroupIds:
+       - !Ref BastionSecurityGroup
+      # Use either any public subnet
+      SubnetId:
+         Fn::ImportValue: !Sub "${EnvironmentName}-PUB2-SN"
+      # this helps us identify which EC2 instance is the Bastion Host
+
+  # The Security Group of the Bastion Host
+  BastionSecurityGroup:
+    Type: AWS::EC2::SecurityGroup
+    Properties:
+      GroupDescription: Allow public SSH access to the bastion host
+      VpcId:
+        Fn::ImportValue:
+          !Sub "${EnvironmentName}-VPCID"
+      SecurityGroupIngress:
+      # Allow SSH access to the bastion host
+      # Ideally, set the ip address of your local computer. In this case, though,
+      # let's just allow any ip address.
+      - IpProtocol: tcp
+        FromPort: 22
+        ToPort: 22
+        CidrIp: 0.0.0.0/0
+      SecurityGroupEgress:
+      - IpProtocol: tcp
+        FromPort: 0
+        ToPort: 65535
+        CidrIp: 0.0.0.0/0
+
+Outputs:
+
+  S3Bucket:
+    Description: A reference to the created S3
+    Value: !Ref S3Bucket
+    Export:
+      Name: !Sub ${EnvironmentName}-S3
+
+  WebAppLB:
+    Description: A reference to the created LB
+    Value: !Sub http://${WebAppLB.DNSName}
+    Export:
+      Name: !Sub ${EnvironmentName}-LB
+
+  Bastion:
+    Description: A reference to the created bastion
+    Value: !Ref Bastion
+    Export:
+      Name: !Sub ${EnvironmentName}-Bastion

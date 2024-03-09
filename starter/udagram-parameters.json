@@ -13,7 +13,7 @@
     },
     {
         "ParameterKey": "InstanceKeyPair",
-        "ParameterValue": "WebServerKeyPair"
+        "ParameterValue": "WebServerKeyPair1"
     },
     {
         "ParameterKey": "BastionInstanceType",

@@ -200,8 +200,8 @@ Resources:
         LaunchTemplateId: !Ref WebAppLaunchTemplate
         Version: !GetAtt WebAppLaunchTemplate.LatestVersionNumber
       MinSize: 1
-      DesiredCapacity: 1
-      MaxSize: 1
+      DesiredCapacity: 2
+      MaxSize: 3
       TargetGroupARNs:
       - Ref: WebAppTargetGroup
 
@@ -259,14 +259,8 @@ Resources:
     Properties:
       InstanceType: !Ref BastionInstanceType
       KeyName: !Ref BastionKeyPair
-      # Paste the latest UBUNTU AMI
       ImageId: !Ref BastionInstanceAMI
-      # NetworkInterfaces:
-      #   - AssociatePublicIpAddress: true
-      #     DeviceIndex: '0'
-      #     GroupSet:
-      #       - !Ref BastionSecurityGroup
-      #     SubnetId: !Sub "${EnvironmentName}-PUB2-SN"
+      # this helps us identify which EC2 instance is the Bastion Host
       Tags:
         - Key: Name
           Value: "Bastion Host"
@@ -275,7 +269,6 @@ Resources:
       # Use either any public subnet
       SubnetId:
          Fn::ImportValue: !Sub "${EnvironmentName}-PUB2-SN"
-      # this helps us identify which EC2 instance is the Bastion Host
 
   # The Security Group of the Bastion Host
   BastionSecurityGroup:
